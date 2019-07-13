@@ -1,0 +1,48 @@
+#!/usr/bin/python3
+
+import argparse
+
+import prcc
+
+
+def cli():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", help="commands")
+    subparsers.required = True
+
+    parser_list = subparsers.add_parser("list", help="list available data")
+    parser_import = subparsers.add_parser("import", help="parse and store data")
+    parser_export = subparsers.add_parser("export", help="retrieve stored data")
+    parser_import.add_argument(
+        "objects", metavar="object", nargs="+", help="objects to import"
+    )
+    parser_export.add_argument(
+        "objects", metavar="object", nargs="+", help="objects to export"
+    )
+    parser_import.add_argument(
+        "--from",
+        "-f",
+        dest="source",
+        default="infofundos",
+        choices=["infofundos"],
+        help="source of data",
+    )
+    parser_export.add_argument("--to", "-t", dest="dest", help="destination of data")
+    args = parser.parse_args()
+
+    if args.command == "list":
+        for item in prcc.collection.list_items():
+            print(item)
+    elif args.command == "import":
+        prcc.import_objects(args.objects, args.source)
+    elif args.command == "export":
+        dataframe = prcc.export_objects(args.objects)
+        if args.dest is not None:
+            # TODO: test extension to support other file types
+            dataframe.to_csv(args.dest)
+        else:
+            print(dataframe.to_csv())
+
+
+if __name__ == "__main__":
+    cli()
