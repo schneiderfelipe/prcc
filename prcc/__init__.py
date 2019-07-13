@@ -6,11 +6,60 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+import pandas_datareader.data as web
 import pystore
+import requests_cache
 
 storage_path = os.path.expanduser("~/.prcc")
 pystore.set_path(storage_path)
 collection = pystore.store("data").collection("all")
+requests_cache.core.install_cache(os.path.join(storage_path, "cache"), "sqlite")
+
+
+# TODO: make an example with Quandl
+def extract_datareader(objects, data_source="av-daily-adjusted"):
+    """
+    Retrieve daily data with web.DataReader.
+
+    Index is forced to datetime.
+
+    Parameters
+    ----------
+    objects : str or list of strs
+        Object or objects to extract
+    data_source : str, optional
+        The data source ("quandl", "av-daily-adjusted", "iex", "fred", "ff", etc.)
+
+    Yields
+    ------
+    item : str
+        Name for the extract data
+    data : dataframe
+        A dataframe with all extract data
+    metadata : dict
+        Extra information about the extract data
+
+    Examples
+    --------
+    >>> for item, data, metadata in extract_datareader("^BVSP"):
+    ...     print(item, metadata)
+    ^BVSP {'price_column': 'adjusted close'}
+    >>> for item, data, metadata in extract_datareader(["PETR4.SAO", "ITUB4.SAO"]):
+    ...     print(item, metadata)
+    PETR4.SAO {'price_column': 'adjusted close'}
+    ITUB4.SAO {'price_column': 'adjusted close'}
+
+    """
+    if isinstance(objects, str):
+        objects = [objects]
+
+    metadata = {"price_column": "adjusted close"}
+    for item in objects:
+        # TODO: support start and end dates
+        data = web.DataReader(item, data_source)
+        data.index = pd.to_datetime(data.index)
+
+        yield item, data, metadata
 
 
 def extract_infofundos(io):
@@ -19,6 +68,8 @@ def extract_infofundos(io):
 
     Only variable data is returned, i.e. constant columns are removed and
     stored as metadata (see examples).
+
+    Index is forced to datetime.
 
     Parameters
     ----------
@@ -44,14 +95,15 @@ def extract_infofundos(io):
     TARPON GT {'price_column': 'Cota', 'code': 34259, 'description': 'FUNDO DE INVESTIMENTO EM COTAS DE FUNDOS DE INVESTIMENTO EM AÇÕES'}
 
     """
-    dataframe = pd.read_excel(
-        io, sheet_name="Cotas", index_col=2, skip_footer=1
-    ).dropna(axis=0, how="all")
+    dataframe = pd.read_excel(io, sheet_name="Cotas", index_col=2, skipfooter=1).dropna(
+        axis=0, how="all"
+    )
 
     pattern = re.compile(r"FUNDO|CRÉDITO")
     for item, group in dataframe.groupby("Fundo"):
         # https://stackoverflow.com/a/20210048/4039050
         data = group.loc[:, (group != group.iloc[0]).any()]
+        data.index = pd.to_datetime(data.index)
 
         match = pattern.search(item)
         if match:
@@ -68,13 +120,14 @@ def extract_infofundos(io):
         yield item, data, metadata
 
 
+# TODO: make an example with Quandl
 def import_objects(objects, source, overwrite=True):
     """
     Store objects using PyStore.
 
     Parameters
     ----------
-    objects : list of str
+    objects : str or list of strs
         List of items to extract and store
     source : str
         Source key for extraction (see examples below)
@@ -87,29 +140,34 @@ def import_objects(objects, source, overwrite=True):
     >>> item = collection.item("TARPON GT")
     >>> item.metadata["code"]
     34259
-    >>> item.head()  # doctest: +NORMALIZE_WHITESPACE
-                    Cota  Variação  Captação  Resgate          PL  Cotistas
+    >>> item.tail()  # doctest: +NORMALIZE_WHITESPACE
+                    Cota  Variação    Captação   Resgate           PL  Cotistas
     Data
-    2015-08-04  2.258242       NaN       0.0      0.0  9502613.39      10.0
-    2015-08-05  2.244789 -0.005957       0.0      0.0  9446004.04      10.0
-    2015-08-06  2.224238 -0.009155       0.0      0.0  9359525.55      10.0
-    2015-08-07  2.193907 -0.013637       0.0      0.0  9231892.92      10.0
-    2015-08-10  2.193513 -0.000180       0.0      0.0  9230235.39      10.0
-    >>> item = collection.item("CA INDOSUEZ VITESSE")
-    >>> item.metadata["code"]
-    13228
-    >>> item.head()  # doctest: +NORMALIZE_WHITESPACE
-                     Cota  Variação     Captação  Resgate           PL  Cotistas
-    Data
-    2011-08-16  10.000000       NaN  18600000.00      0.0  18600000.00       3.0
-    2011-08-17  10.004863  0.000486  17608433.86      0.0  36217480.54      10.0
-    2011-08-18  10.009643  0.000478    600016.53      0.0  36834800.68      12.0
-    2011-08-19  10.014469  0.000482         0.00      0.0  36852558.51      12.0
-    2011-08-22  10.019299  0.000482    300000.00      0.0  37170334.04      13.0
+    2019-06-18  6.778209  0.002867   390487.16      0.00  80448095.55    2710.0
+    2019-06-19  6.907007  0.019002  1058349.86      0.00  81976755.80    2775.0
+    2019-06-21  6.892222 -0.002141  1058349.86  43026.86  83583126.05    2845.0
+    2019-06-24  6.926969  0.005042   365520.69  40098.89  84329940.18    2917.0
+    2019-06-25  6.845344 -0.011784   652833.24      0.00  83989058.53    2998.0
+
+    >>> import_objects("PETR4.SAO", "av-daily-adjusted")
+    >>> item = collection.item("PETR4.SAO")
+    >>> item.tail()  # doctest: +NORMALIZE_WHITESPACE
+                 open   high    low  close  adjusted close    volume  dividend amount  split coefficient
+    index
+    2019-07-05  27.27  27.59  27.13  27.40           27.40  27414700              0.0                1.0
+    2019-07-08  27.50  27.72  27.44  27.65           27.65  25318200              0.0                1.0
+    2019-07-10  28.00  28.27  27.97  28.07           28.07  50715800              0.0                1.0
+    2019-07-11  28.20  28.51  28.16  28.40           28.40  48206900              0.0                1.0
+    2019-07-12  28.54  28.74  28.41  28.63           28.63  37796100              0.0                1.0
 
     """
+    if isinstance(objects, str):
+        objects = [objects]
+
     if source == "infofundos":
         extract_func = extract_infofundos
+    else:
+        extract_func = lambda s: extract_datareader(s, source)
 
     for obj in objects:
         for item, data, metadata in extract_func(obj):
@@ -126,7 +184,7 @@ def export_objects(objects):
 
     Parameters
     ----------
-    objects : list of str
+    objects : str or list of strs
         Item names to export
 
     Returns
@@ -141,16 +199,51 @@ def export_objects(objects):
     Examples
     --------
     >>> data = export_objects(["CA INDOSUEZ VITESSE", "TARPON GT"])
-    >>> data.tail()
+    >>> data.tail()  # doctest: +NORMALIZE_WHITESPACE
                 CA INDOSUEZ VITESSE  TARPON GT
-    Data                                      
+    Data
     2019-06-18            22.420314   6.778209
     2019-06-19            22.426387   6.907007
     2019-06-21            22.431954   6.892222
     2019-06-24            22.437576   6.926969
     2019-06-25            22.443196   6.845344
+    >>> data = export_objects("PETR4.SAO")
+    >>> data.tail()  # doctest: +NORMALIZE_WHITESPACE
+                PETR4.SAO
+    index
+    2019-07-05      27.40
+    2019-07-08      27.65
+    2019-07-10      28.07
+    2019-07-11      28.40
+    2019-07-12      28.63
+    >>> data = export_objects(["PETR4.SAO", "TARPON GT"])
+    >>> data.tail(20)
+                PETR4.SAO  TARPON GT
+    2019-06-13      27.18   6.736261
+    2019-06-14      27.06   6.782966
+    2019-06-17      27.11   6.758832
+    2019-06-18      27.45   6.778209
+    2019-06-19      27.52   6.907007
+    2019-06-21      28.28   6.892222
+    2019-06-24      28.25   6.926969
+    2019-06-25      27.51   6.845344
+    2019-06-26      27.67        NaN
+    2019-06-27      27.23        NaN
+    2019-06-28      27.41        NaN
+    2019-07-01      27.26        NaN
+    2019-07-02      26.82        NaN
+    2019-07-03      27.18        NaN
+    2019-07-04      27.39        NaN
+    2019-07-05      27.40        NaN
+    2019-07-08      27.65        NaN
+    2019-07-10      28.07        NaN
+    2019-07-11      28.40        NaN
+    2019-07-12      28.63        NaN
 
     """
+    if isinstance(objects, str):
+        objects = [objects]
+
     prices = []
     for obj in objects:
         item = collection.item(obj)

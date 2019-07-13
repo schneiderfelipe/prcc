@@ -6,6 +6,7 @@ import prcc
 
 
 def cli():
+    # TODO: improve helps and descriptions
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", help="commands")
     subparsers.required = True
@@ -23,8 +24,8 @@ def cli():
         "--from",
         "-f",
         dest="source",
-        default="infofundos",
-        choices=["infofundos"],
+        default="av-daily-adjusted",
+        choices=["infofundos", "av-daily-adjusted"],
         help="source of data",
     )
     parser_export.add_argument("--to", "-t", dest="dest", help="destination of data")
