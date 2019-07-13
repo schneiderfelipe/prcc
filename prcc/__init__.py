@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pandas_datareader.data as web
 import pystore
+import unidecode
 import requests_cache
 
 storage_path = os.path.expanduser("~/.prcc")
@@ -89,23 +90,30 @@ def extract_infofundos(io):
     --------
     >>> for item, data, metadata in extract_infofundos("examples/cotas1561656396620.xlsx"):
     ...     print(item, metadata)
-    BRASIL PLURAL DEBÊNTURES INCENTIVADAS 45 {'price_column': 'Cota', 'code': 35785, 'description': 'CRÉDITO PRIVADO FI EM COTAS DE FI MULTIMERCADO'}
-    CA INDOSUEZ VITESSE {'price_column': 'Cota', 'code': 13228, 'description': 'FUNDO DE INVESTIMENTO RENDA FIXA CRÉDITO PRIVADO'}
-    DEVANT DEBÊNTURES INCENTIVADAS {'price_column': 'Cota', 'code': 40284, 'description': 'FUNDO DE INVESTIMENTO RENDA FIXA CRÉDITO PRIVADO'}
-    TARPON GT {'price_column': 'Cota', 'code': 34259, 'description': 'FUNDO DE INVESTIMENTO EM COTAS DE FUNDOS DE INVESTIMENTO EM AÇÕES'}
+    BRASIL PLURAL DEBENTURES INCENTIVADAS 45 {'price_column': 'Cota', 'code': 35785, 'description': 'CREDITO PRIVADO FUNDO DE INVESTIMENTO EM COTAS DE FUNDO DE INVESTIMENTO MULTIMERCADO'}
+    CA INDOSUEZ VITESSE {'price_column': 'Cota', 'code': 13228, 'description': 'FUNDO DE INVESTIMENTO RENDA FIXA CREDITO PRIVADO'}
+    DEVANT DEBENTURES INCENTIVADAS {'price_column': 'Cota', 'code': 40284, 'description': 'FUNDO DE INVESTIMENTO RENDA FIXA CREDITO PRIVADO'}
+    TARPON GT {'price_column': 'Cota', 'code': 34259, 'description': 'FUNDO DE INVESTIMENTO EM COTAS DE FUNDOS DE INVESTIMENTO EM ACOES'}
 
     """
     dataframe = pd.read_excel(io, sheet_name="Cotas", index_col=2, skipfooter=1).dropna(
         axis=0, how="all"
     )
 
-    pattern = re.compile(r"FUNDO|CRÉDITO")
+    spaces_pattern = re.compile(r"\s+")
+    split_pattern = re.compile(r"FUNDO|CREDITO")
     for item, group in dataframe.groupby("Fundo"):
         # https://stackoverflow.com/a/20210048/4039050
         data = group.loc[:, (group != group.iloc[0]).any()]
         data.index = pd.to_datetime(data.index)
 
-        match = pattern.search(item)
+        # https://stackoverflow.com/a/2633310/4039050
+        item = unidecode.unidecode(item)
+        # https://stackoverflow.com/a/1546244/4039050
+        item = spaces_pattern.sub(" ", item)
+        item = item.replace(" FI ", " FUNDO DE INVESTIMENTO ")
+
+        match = split_pattern.search(item)
         if match:
             pos = match.start()
             item, description = item[:pos].strip(), item[pos:].strip()

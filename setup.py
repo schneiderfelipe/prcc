@@ -19,6 +19,7 @@ setup(
         "pandas_datareader",
         "requests_cache",
         "pystore",
+        "unidecode",
     ],
     license="MIT",
     url="https://github.com/schneiderfelipe/prcc",
