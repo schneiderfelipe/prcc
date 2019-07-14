@@ -205,14 +205,23 @@ def import_objects(objects, source, overwrite=True):
     else:
         extract_func = lambda s: extract_datareader(s, source)
 
+    available_items = set(collection.list_items())
     for obj in objects:
         for item, data, metadata in extract_func(obj):
             logging.info(f"Importing {item}.")
 
-            # TODO: update data instead of simply overwrite
-            # if item exists:
-            #     metadata = current_metadata.update(metadata)
-            #     data = current_data.update(data)
+            if item in available_items:
+                logging.info(f"Updating old data for {item}.")
+
+                old_item = collection.item(item)
+
+                old_metadata = old_item.metadata
+                old_metadata.update(metadata)
+                metadata = old_metadata
+
+                old_data = old_item.to_pandas()
+                data = pd.concat([old_data[~old_data.index.isin(data.index)], data])
+
             collection.write(item, data, metadata=metadata, overwrite=overwrite)
 
 
