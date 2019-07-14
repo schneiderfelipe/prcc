@@ -2,23 +2,28 @@
 
 import os
 import re
+import logging
 from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+import pandas_datareader
 import pandas_datareader.data as web
 import pystore
 import unidecode
 import requests_cache
 
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 storage_path = os.path.expanduser("~/.prcc")
 pystore.set_path(storage_path)
 collection = pystore.store("data").collection("all")
+
 requests_cache.core.install_cache(os.path.join(storage_path, "cache"), "sqlite")
 
 
 # TODO: make an example with Quandl
-def extract_datareader(objects, data_source="av-daily-adjusted"):
+def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
     """
     Retrieve daily data with web.DataReader.
 
@@ -26,15 +31,21 @@ def extract_datareader(objects, data_source="av-daily-adjusted"):
 
     Parameters
     ----------
-    objects : str or list of strs
-        Object or objects to extract
+    tickers : str or list of strs
+        Ticker or tickers to extract
     data_source : str, optional
         The data source ("quandl", "av-daily-adjusted", "iex", "fred", "ff", etc.)
+    pause : float, optional
+        Time, in seconds, to pause between consecutive queries of chunks
+
+    Warns
+    -----
+    On remote data error or invalid ticker.
 
     Yields
     ------
-    item : str
-        Name for the extract data
+    ticker : str
+        Short name for the extract data
     data : dataframe
         A dataframe with all extract data
     metadata : dict
@@ -42,25 +53,40 @@ def extract_datareader(objects, data_source="av-daily-adjusted"):
 
     Examples
     --------
-    >>> for item, data, metadata in extract_datareader("^BVSP"):
-    ...     print(item, metadata)
+    >>> for ticker, data, metadata in extract_datareader("^BVSP"):
+    ...     print(ticker, metadata)
     ^BVSP {'price_column': 'adjusted close'}
-    >>> for item, data, metadata in extract_datareader(["PETR4.SAO", "ITUB4.SAO"]):
-    ...     print(item, metadata)
+    >>> for ticker, data, metadata in extract_datareader(["PETR4.SAO", "ITUB4.SAO"], pause=1.0):
+    ...     print(ticker, metadata)
     PETR4.SAO {'price_column': 'adjusted close'}
     ITUB4.SAO {'price_column': 'adjusted close'}
 
     """
-    if isinstance(objects, str):
-        objects = [objects]
+    if isinstance(tickers, str):
+        tickers = [tickers]
+
+    if pause is None:
+        if data_source == "av-daily-adjusted":
+            pause = 12.0  # = 5 calls per minute
+        else:
+            pause = 1.0
 
     metadata = {"price_column": "adjusted close"}
-    for item in objects:
-        # TODO: support start and end dates
-        data = web.DataReader(item, data_source)
+    for ticker in tickers:
+        logging.info(f"Extracting {ticker}.")
+
+        try:
+            # TODO: support start and end dates
+            data = web.DataReader(ticker, data_source)
+        except ValueError as e:
+            logging.warning(e)
+            continue
+        except pandas_datareader._utils.RemoteDataError as e:
+            logging.warning(f"Remote data error{e} for {ticker}.")
+            continue
         data.index = pd.to_datetime(data.index)
 
-        yield item, data, metadata
+        yield ticker, data, metadata
 
 
 def extract_infofundos(io):
@@ -80,7 +106,7 @@ def extract_infofundos(io):
     Yields
     ------
     item : str
-        Name for the extracted data
+        Short name for the extracted data
     data : dataframe
         A dataframe with all data extracted
     metadata : dict
@@ -103,6 +129,8 @@ def extract_infofundos(io):
     spaces_pattern = re.compile(r"\s+")
     split_pattern = re.compile(r"FUNDO|CREDITO")
     for item, group in dataframe.groupby("Fundo"):
+        logging.info(f"Extracting {item}.")
+
         # https://stackoverflow.com/a/20210048/4039050
         data = group.loc[:, (group != group.iloc[0]).any()]
         data.index = pd.to_datetime(data.index)
@@ -179,6 +207,8 @@ def import_objects(objects, source, overwrite=True):
 
     for obj in objects:
         for item, data, metadata in extract_func(obj):
+            logging.info(f"Importing {item}.")
+
             # TODO: update data instead of simply overwrite
             # if item exists:
             #     metadata = current_metadata.update(metadata)
@@ -254,6 +284,8 @@ def export_objects(objects):
 
     prices = []
     for obj in objects:
+        logging.info(f"Exporting {obj}.")
+
         item = collection.item(obj)
         prices.append(item.to_pandas()[item.metadata["price_column"]])
 
