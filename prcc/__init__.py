@@ -139,8 +139,11 @@ def extract_infofundos(io):
         item = unidecode.unidecode(item)
         # https://stackoverflow.com/a/1546244/4039050
         item = spaces_pattern.sub(" ", item)
-        item = item.replace(" FI ", " FUNDO DE INVESTIMENTO ")
 
+        item = item.replace(" FI ", " FUNDO DE INVESTIMENTO ")
+        item = item.replace("FUNDO DE INVESTIMENTO EM ACOES-BDR NIVEL I", "BDR NIVEL I FUNDO DE INVESTIMENTO EM ACOES")
+
+        logging.info(f"Expanded name to {item}.")
         match = split_pattern.search(item)
         if match:
             pos = match.start()
