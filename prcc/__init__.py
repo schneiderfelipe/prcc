@@ -141,7 +141,10 @@ def extract_infofundos(io):
         item = spaces_pattern.sub(" ", item)
 
         item = item.replace(" FI ", " FUNDO DE INVESTIMENTO ")
-        item = item.replace("FUNDO DE INVESTIMENTO EM ACOES-BDR NIVEL I", "BDR NIVEL I FUNDO DE INVESTIMENTO EM ACOES")
+        item = item.replace(
+            "FUNDO DE INVESTIMENTO EM ACOES-BDR NIVEL I",
+            "BDR NIVEL I FUNDO DE INVESTIMENTO EM ACOES",
+        )
 
         logging.info(f"Expanded name to {item}.")
         match = split_pattern.search(item)
@@ -242,6 +245,10 @@ def export_objects(objects):
     data : dataframe
         Daily price data with as many columns as objects
 
+    Warns
+    -----
+    On file-not-found errors.
+
     Notes
     -----
     Prices equal zero are considered data error and are assigned `numpy.nan`.
@@ -293,17 +300,23 @@ def export_objects(objects):
     """
     if isinstance(objects, str):
         objects = [objects]
+    columns = objects.copy()
 
     prices = []
     for obj in objects:
         logging.info(f"Exporting {obj}.")
 
-        item = collection.item(obj)
+        try:
+            item = collection.item(obj)
+        except FileNotFoundError as e:
+            logging.warning(e)
+            columns.remove(obj)
+            continue
         prices.append(item.to_pandas()[item.metadata["price_column"]])
 
     data = pd.concat(prices, axis="columns").replace(
         0.0, np.nan
     )  # "there's no free lunch"
-    data.columns = objects
+    data.columns = columns
 
     return data
