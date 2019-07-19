@@ -1,5 +1,9 @@
 #!/usr/bin/python3
 
+"""
+personal daily time series storage for stock market and funds
+"""
+
 import logging
 import argparse
 
@@ -12,24 +16,30 @@ _logging_level = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG}
 # TODO: Minimum score interface like <https://github.com/jackmoody11/stockscore>
 # (I didn't like or understood the code there, but the idea is good)
 def cli():
-    # TODO: improve helps and descriptions
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "-v", "--verbosity", action="count", default=0, help="increase output verbosity"
+        "-v",
+        "--verbose",
+        dest="verbosity",
+        action="count",
+        default=0,
+        help="increase output verbosity",
     )
 
-    subparsers = parser.add_subparsers(dest="command", help="commands")
+    subparsers = parser.add_subparsers(dest="command", help="possible commands")
     subparsers.required = True
 
-    parser_list = subparsers.add_parser("list", help="list available data")
-    parser_import = subparsers.add_parser("import", help="parse and store data")
-    parser_export = subparsers.add_parser("export", help="retrieve stored data")
-    parser_index = subparsers.add_parser("index", help="show an index")
+    parser_list_desc = "list all tickers currently available in the database"
+    parser_list = subparsers.add_parser(
+        "list", description=parser_list_desc, help=parser_list_desc
+    )
+
+    parser_import_desc = "retrieve, parse and store data for a new ticker set"
+    parser_import = subparsers.add_parser(
+        "import", description=parser_import_desc, help=parser_import_desc
+    )
     parser_import.add_argument(
         "objects", metavar="object", nargs="+", help="objects to import"
-    )
-    parser_export.add_argument(
-        "objects", metavar="object", nargs="+", help="objects to export"
     )
     parser_import.add_argument(
         "--from",
@@ -39,12 +49,25 @@ def cli():
         choices=["infofundos", "av-daily-adjusted"],
         help="source of data",
     )
+
+    parser_export_desc = "output all available data for a set of tickers"
+    parser_export = subparsers.add_parser(
+        "export", description=parser_export_desc, help=parser_export_desc
+    )
+    parser_export.add_argument(
+        "objects", metavar="object", nargs="+", help="objects to export"
+    )
+    parser_export.add_argument("--to", "-t", dest="dest", help="destination of data")
+
+    parser_index_desc = "list tickers that compose a particular index"
+    parser_index = subparsers.add_parser(
+        "index", description=parser_index_desc, help=parser_index_desc
+    )
     parser_index.add_argument(
         "name", choices=prcc._b3_indices, type=str.lower, help="index name"
     )
-    parser_export.add_argument("--to", "-t", dest="dest", help="destination of data")
-    args = parser.parse_args()
 
+    args = parser.parse_args()
     logging.basicConfig(level=_logging_level[args.verbosity])
 
     if args.command == "list":
