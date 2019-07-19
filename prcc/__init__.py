@@ -252,6 +252,9 @@ def import_objects(objects, source, overwrite=True):
     Values are tested against the database before updating. Data already
     up-to-dated is not downloaded.
 
+    Objects can be an index name, in which case all tickers in the index are
+    considered.
+
     Examples
     --------
     >>> import_objects(["examples/cotas1561656396620.xlsx"], "infofundos")
@@ -278,6 +281,11 @@ def import_objects(objects, source, overwrite=True):
     2019-07-11  28.20  28.51  28.16  28.40           28.40  48206900              0.0                1.0
     2019-07-12  28.54  28.74  28.41  28.53           28.53  40908900              0.0                1.0
 
+    Importing tickers from indices:
+
+    >>> import_objects("ICO2", "av-daily-adjusted")
+    >>> import_objects(["PETR4.SAO", "ICO2"], "av-daily-adjusted")
+
     """
     if isinstance(objects, str):
         objects = [objects]
@@ -289,6 +297,10 @@ def import_objects(objects, source, overwrite=True):
 
     available_items = set(collection.list_items())
     for obj in objects:
+        if obj.lower() in _b3_indices:
+            import_objects(get_index(obj), source, overwrite)
+            continue
+
         if source != "infofundos" and obj in available_items:
             # here, obj == item
             old_item = collection.item(obj)
@@ -336,6 +348,9 @@ def export_objects(objects):
     -----
     Prices equal zero are considered data error and are assigned `numpy.nan`.
 
+    Objects can be an index name, in which case all tickers in the index are
+    considered.
+
     Examples
     --------
     >>> data = export_objects(["CA INDOSUEZ VITESSE", "TARPON GT"])
@@ -380,13 +395,41 @@ def export_objects(objects):
     2019-07-11      28.40        NaN
     2019-07-12      28.53        NaN
 
+    Exporting tickers from indices:
+
+    >>> data = export_objects("ICO2")
+    >>> len(data.columns)  # 29 if KLBN11.SAO had data available
+    28
+    >>> data = export_objects(["KROT3.SAO", "ICO2"])
+    >>> len(data.columns)
+    29
+    >>> "KROT3.SAO" in data.columns and "ITUB4.SAO" in data.columns
+    True
+
+    When exporting indices, ticker redundancy is avoided:
+
+    >>> data = export_objects(["PETR4.SAO", "ICO2", "CIEL3.SAO"])  # Both PETR4.SAO and CIEL3.SAO are already in ICO2
+    >>> len(data.columns)
+    28
+
     """
     if isinstance(objects, str):
         objects = [objects]
-    columns = objects.copy()
 
     prices = []
+    columns = []
     for obj in objects:
+        if obj.lower() in _b3_indices:
+            index_data = export_objects(
+                [ticker for ticker in get_index(obj) if ticker not in columns]
+            )
+            prices.append(index_data)
+
+            columns.extend(index_data.columns)
+            continue
+        elif obj in columns:
+            continue
+
         logging.info(f"Exporting {obj}.")
 
         try:
@@ -394,9 +437,9 @@ def export_objects(objects):
         except FileNotFoundError as e:
             logging.warning(e)
 
-            columns.remove(obj)
             continue
         prices.append(item.to_pandas()[item.metadata["price_column"]])
+        columns.append(obj)
 
     data = pd.concat(prices, axis="columns").replace(
         0.0, np.nan
