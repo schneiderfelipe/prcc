@@ -5,6 +5,7 @@ import re
 import time
 import logging
 import datetime
+from timeit import default_timer as timer
 from collections import OrderedDict
 
 import numpy as np
@@ -25,6 +26,7 @@ requests_cache.core.install_cache(
     os.path.join(storage_path, "cache"), "sqlite", expire_after=86400
 )
 
+_last_api_call = 0.0
 _b3_indices = {
     # Índices Amplos
     "ibovespa": "IBOV",
@@ -63,8 +65,6 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
     """
     Retrieve daily data with web.DataReader.
 
-    Index is forced to datetime.
-
     Parameters
     ----------
     tickers : str or list of strs
@@ -76,7 +76,8 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
 
     Warns
     -----
-    On remote data error or invalid ticker.
+    On remote data error or invalid ticker. If using AlphaVantage API, extra
+    pause is made in those cases (see notes).
 
     Yields
     ------
@@ -86,6 +87,15 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
         A dataframe with all extract data
     metadata : dict
         Extra information about the extract data
+
+    Notes
+    -----
+    Index is forced to datetime.
+
+    Attempt is made not to go over AlphaVantage API limits (maximum of five
+    calls per minute for non-premium accounts). This means that some pauses
+    are made, but they are not on the conservative side so be aware of remote
+    data errors and try again latter.
 
     Examples
     --------
@@ -98,17 +108,30 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
     ITUB4.SAO {'price_column': 'adjusted close'}
 
     """
+    global _last_api_call
+
     if isinstance(tickers, str):
         tickers = [tickers]
 
     if pause is None:
         if data_source == "av-daily-adjusted":
-            pause = 14.0  # < 5 calls per minute
+            pause = 12.0  # max. 5 calls per minute for non-premium accounts
         else:
             pause = 1.0
+    extra_pause = 0.25 * pause
 
     metadata = {"price_column": "adjusted close"}
     for ticker in tickers:
+        end = timer()
+        if end - _last_api_call > pause:
+            _last_api_call = end
+        else:
+            time_interval = end - _last_api_call + np.random.uniform(0.0, extra_pause)
+            logging.info(f"Waiting {time_interval:.3f} seconds.")
+
+            time.sleep(time_interval)
+            _last_api_call = timer()
+
         logging.info(f"Attempting to retrieve {ticker}.")
 
         try:
@@ -116,11 +139,19 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
             data = web.DataReader(ticker, data_source)
         except ValueError as e:
             logging.warning(e)
+
+            time_interval = np.random.uniform(0.0, 2.0 * pause)
+            logging.info(f"Waiting {time_interval:.3f} extra seconds.")
+
+            time.sleep(time_interval)
             continue
         except pandas_datareader._utils.RemoteDataError as e:
             logging.warning(f"Remote data error{e} for {ticker}.")
-            time.sleep(pause)
 
+            time_interval = np.random.uniform(0.0, 2.0 * pause)
+            logging.info(f"Waiting {time_interval:.3f} extra seconds.")
+
+            time.sleep(time_interval)
             requests_cache.get_cache().remove_old_entries(datetime.datetime.now())
             continue
         data.index = pd.to_datetime(data.index)
@@ -186,6 +217,7 @@ def extract_infofundos(io):
         )
 
         logging.info(f"Expanded name to {item}.")
+
         match = split_pattern.search(item)
         if match:
             pos = match.start()
@@ -257,17 +289,20 @@ def import_objects(objects, source, overwrite=True):
 
     available_items = set(collection.list_items())
     for obj in objects:
+        if source != "infofundos" and obj in available_items:
+            # here, obj == item
+            old_item = collection.item(obj)
+            old_data = old_item.to_pandas()
+
+            if old_data.index[-1].date() == datetime.datetime.today().date():
+                logging.info(f"{obj} is already up-to-date.")
+
+                continue
+
         for item, data, metadata in extract_func(obj):
             logging.info(f"Importing {item}.")
 
-            if item in available_items:
-                old_item = collection.item(item)
-                old_data = old_item.to_pandas()
-
-                if old_data.index[-1].date() == datetime.datetime.today().date():
-                    logging.info(f"{item} is already up-to-date.")
-                    continue
-
+            if source != "infofundos" and item in available_items:
                 logging.info(f"Updating old data for {item}.")
 
                 old_metadata = old_item.metadata
@@ -358,6 +393,7 @@ def export_objects(objects):
             item = collection.item(obj)
         except FileNotFoundError as e:
             logging.warning(e)
+
             columns.remove(obj)
             continue
         prices.append(item.to_pandas()[item.metadata["price_column"]])
