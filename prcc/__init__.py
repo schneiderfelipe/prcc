@@ -2,7 +2,9 @@
 
 import os
 import re
+import time
 import logging
+import datetime
 from collections import OrderedDict
 
 import numpy as np
@@ -19,7 +21,9 @@ storage_path = os.path.expanduser("~/.prcc")
 pystore.set_path(storage_path)
 collection = pystore.store("data").collection("all")
 
-requests_cache.core.install_cache(os.path.join(storage_path, "cache"), "sqlite")
+requests_cache.core.install_cache(
+    os.path.join(storage_path, "cache"), "sqlite", expire_after=86400
+)
 
 _b3_indices = {
     # Índices Amplos
@@ -99,13 +103,13 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
 
     if pause is None:
         if data_source == "av-daily-adjusted":
-            pause = 12.0  # = 5 calls per minute
+            pause = 14.0  # < 5 calls per minute
         else:
             pause = 1.0
 
     metadata = {"price_column": "adjusted close"}
     for ticker in tickers:
-        logging.info(f"Extracting {ticker}.")
+        logging.info(f"Attempting to retrieve {ticker}.")
 
         try:
             # TODO: support start and end dates
@@ -115,6 +119,9 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
             continue
         except pandas_datareader._utils.RemoteDataError as e:
             logging.warning(f"Remote data error{e} for {ticker}.")
+            time.sleep(pause)
+
+            requests_cache.get_cache().remove_old_entries(datetime.datetime.now())
             continue
         data.index = pd.to_datetime(data.index)
 
@@ -208,6 +215,11 @@ def import_objects(objects, source, overwrite=True):
     overwrite : bool, optional
         Whether to overwrite existing data
 
+    Notes
+    -----
+    Values are tested against the database before updating. Data already
+    up-to-dated is not downloaded.
+
     Examples
     --------
     >>> import_objects(["examples/cotas1561656396620.xlsx"], "infofundos")
@@ -249,15 +261,19 @@ def import_objects(objects, source, overwrite=True):
             logging.info(f"Importing {item}.")
 
             if item in available_items:
-                logging.info(f"Updating old data for {item}.")
-
                 old_item = collection.item(item)
+                old_data = old_item.to_pandas()
+
+                if old_data.index[-1].date() == datetime.datetime.today().date():
+                    logging.info(f"{item} is already up-to-date.")
+                    continue
+
+                logging.info(f"Updating old data for {item}.")
 
                 old_metadata = old_item.metadata
                 old_metadata.update(metadata)
                 metadata = old_metadata
 
-                old_data = old_item.to_pandas()
                 data = pd.concat([old_data[~old_data.index.isin(data.index)], data])
 
             collection.write(item, data, metadata=metadata, overwrite=overwrite)

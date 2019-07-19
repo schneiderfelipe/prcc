@@ -17,6 +17,7 @@ setup(
         "numpy",
         "pandas",
         "pandas_datareader",
+        "requests",
         "requests_cache",
         "pystore",
         "unidecode",
