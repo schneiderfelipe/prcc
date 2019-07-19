@@ -1,13 +1,19 @@
 #!/usr/bin/python3
 
+import logging
 import argparse
 
 import prcc
 
+_logging_level = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG}
 
 def cli():
     # TODO: improve helps and descriptions
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-v", "--verbosity", action="count", default=0, help="increase output verbosity"
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="commands")
     subparsers.required = True
 
@@ -34,6 +40,8 @@ def cli():
     )
     parser_export.add_argument("--to", "-t", dest="dest", help="destination of data")
     args = parser.parse_args()
+
+    logging.basicConfig(level=_logging_level[args.verbosity])
 
     if args.command == "list":
         for item in prcc.collection.list_items():
