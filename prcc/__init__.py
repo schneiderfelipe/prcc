@@ -236,7 +236,7 @@ def import_objects(objects, source, overwrite=True):
     2019-06-25  6.845344 -0.011784   652833.24      0.00  83989058.53    2998.0
 
     >>> import_objects("PETR4.SAO", "av-daily-adjusted")
-    >>> item = collection.item("PETR4.SAO")
+    >>> item = collection.item("PETR4.SAO").to_pandas().truncate(after="2019-07-12")
     >>> item.tail()  # doctest: +NORMALIZE_WHITESPACE
                  open   high    low  close  adjusted close    volume  dividend amount  split coefficient
     index
@@ -244,7 +244,7 @@ def import_objects(objects, source, overwrite=True):
     2019-07-08  27.50  27.72  27.44  27.65           27.65  25318200              0.0                1.0
     2019-07-10  28.00  28.27  27.97  28.07           28.07  50715800              0.0                1.0
     2019-07-11  28.20  28.51  28.16  28.40           28.40  48206900              0.0                1.0
-    2019-07-12  28.54  28.74  28.41  28.63           28.63  37796100              0.0                1.0
+    2019-07-12  28.54  28.74  28.41  28.53           28.53  40908900              0.0                1.0
 
     """
     if isinstance(objects, str):
@@ -312,7 +312,7 @@ def export_objects(objects):
     2019-06-21            22.431954   6.892222
     2019-06-24            22.437576   6.926969
     2019-06-25            22.443196   6.845344
-    >>> data = export_objects("PETR4.SAO")
+    >>> data = export_objects("PETR4.SAO").truncate(after="2019-07-12")
     >>> data.tail()  # doctest: +NORMALIZE_WHITESPACE
                 PETR4.SAO
     index
@@ -320,8 +320,8 @@ def export_objects(objects):
     2019-07-08      27.65
     2019-07-10      28.07
     2019-07-11      28.40
-    2019-07-12      28.63
-    >>> data = export_objects(["PETR4.SAO", "TARPON GT"])
+    2019-07-12      28.53
+    >>> data = export_objects(["PETR4.SAO", "TARPON GT"]).truncate(after="2019-07-12")
     >>> data.tail(20)
                 PETR4.SAO  TARPON GT
     2019-06-13      27.18   6.736261
@@ -343,7 +343,7 @@ def export_objects(objects):
     2019-07-08      27.65        NaN
     2019-07-10      28.07        NaN
     2019-07-11      28.40        NaN
-    2019-07-12      28.63        NaN
+    2019-07-12      28.53        NaN
 
     """
     if isinstance(objects, str):
