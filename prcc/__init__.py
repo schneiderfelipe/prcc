@@ -21,6 +21,38 @@ collection = pystore.store("data").collection("all")
 
 requests_cache.core.install_cache(os.path.join(storage_path, "cache"), "sqlite")
 
+_b3_indices = {
+    # Índices Amplos
+    "ibovespa": "IBOV",
+    "ibrx100": "IBRX",
+    "ibrx50": "IBXL",
+    "ibra": "IBRA",
+    # Índices de Governança
+    "igcx": "IGCX",
+    "itag": "ITAG",
+    "igct": "IGCT",
+    "igc-nm": "IGNM",
+    # Índices de Segmento
+    "idiv": "IDIV",
+    "mlcx": "MLCX",
+    "smll": "SMLL",
+    "ivbx2": "IVBX",
+    # Índices de Sustentabilidade
+    "ico2": "ICO2",
+    "ise": "ISEE",
+    # Índices Setoriais
+    "ifnc": "IFNC",
+    "imob": "IMOB",
+    "util": "UTIL",
+    "icon": "ICON",
+    "iee": "IEEX",
+    "imat": "IMAT",
+    "indx": "INDX",
+    # Outros Índices
+    "bdrx": "BDRX",
+    "ifix": "IFIX",
+}
+
 
 # TODO: make an example with Quandl
 def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
@@ -320,3 +352,75 @@ def export_objects(objects):
     data.columns = columns
 
     return data
+
+
+def get_index(name):
+    """
+    Get a list of tickers for an index.
+
+    Parameters
+    ----------
+    name : str
+        Index name. See notes for supported indices
+
+    Returns
+    -------
+    tickers : list of strs
+        Tickers in the requested index
+
+    Notes
+    -----
+    The following indices are available (case-insensitive):
+
+    - Índices Amplos
+      - Ibovespa
+      - IBrX100
+      - IBrX50
+      - IBrA
+    - Índices de Governança
+      - IGCX
+      - ITAG
+      - IGCT
+      - IGC-NM
+    - Índices de Segmento
+      - IDIV
+      - MLCX
+      - SMLL
+      - IVBX2
+    - Índices de Sustentabilidade
+      - ICO2
+      - ISE
+    - Índices Setoriais
+      - IFNC
+      - IMOB
+      - UTIL
+      - ICON
+      - IEE
+      - IMAT
+      - INDX
+    - Outros Índices
+      - BDRX
+      - IFIX
+
+
+    Examples
+    --------
+    >>> get_index("ibovespa")[:5]
+    ['ITUB4.SAO', 'VALE3.SAO', 'BBDC4.SAO', 'PETR4.SAO', 'B3SA3.SAO']
+    >>> get_index("bdrx")[:5]
+    ['AAPL34.SAO', 'MSFT34.SAO', 'AMZO34.SAO', 'FBOK34.SAO', 'VISA34.SAO']
+    >>> len(get_index("ibrx100"))
+    100
+    """
+    # A tabela real se encontra dentro de um frame (url abaixo) do link indicado acima.
+    url = f"http://bvmf.bmfbovespa.com.br/indices/ResumoCarteiraTeorica.aspx?Indice={_b3_indices[name.lower()]}&idioma=pt-br"
+
+    dataframe = (
+        pd.read_html(url, decimal=",", thousands=".", index_col=0)[0]
+        .iloc[:-1]
+        .sort_values("Part. (%)", ascending=False)
+    )
+    dataframe.index = dataframe.index + ".SAO"
+    dataframe["Part. (%)"] /= 100.0
+
+    return list(dataframe.index)

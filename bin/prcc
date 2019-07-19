@@ -14,6 +14,7 @@ def cli():
     parser_list = subparsers.add_parser("list", help="list available data")
     parser_import = subparsers.add_parser("import", help="parse and store data")
     parser_export = subparsers.add_parser("export", help="retrieve stored data")
+    parser_index = subparsers.add_parser("index", help="show an index")
     parser_import.add_argument(
         "objects", metavar="object", nargs="+", help="objects to import"
     )
@@ -27,6 +28,9 @@ def cli():
         default="av-daily-adjusted",
         choices=["infofundos", "av-daily-adjusted"],
         help="source of data",
+    )
+    parser_index.add_argument(
+        "name", choices=prcc._b3_indices, type=str.lower, help="index name"
     )
     parser_export.add_argument("--to", "-t", dest="dest", help="destination of data")
     args = parser.parse_args()
@@ -43,6 +47,9 @@ def cli():
             dataframe.to_csv(args.dest)
         else:
             print(dataframe.to_csv())
+    elif args.command == "index":
+        tickers = prcc.get_index(args.name)
+        print("\n".join(tickers))
 
 
 if __name__ == "__main__":
