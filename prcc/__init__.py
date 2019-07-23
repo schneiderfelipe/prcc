@@ -135,7 +135,7 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
         logging.info(f"Attempting to retrieve {ticker}.")
 
         try:
-            # TODO: support start and end dates
+            # TODO: support start_date and end_date
             data = web.DataReader(ticker, data_source)
         except ValueError as e:
             logging.warning(e)
@@ -234,7 +234,7 @@ def extract_infofundos(io):
 
 
 # TODO: make an example with Quandl
-def import_objects(objects, source, overwrite=True):
+def import_objects(objects, source, overwrite=True, *args, **kwargs):
     """
     Store objects using PyStore.
 
@@ -254,6 +254,9 @@ def import_objects(objects, source, overwrite=True):
 
     Objects can be an index name, in which case all tickers in the index are
     considered.
+
+    Extra arguments are passed directly to the extraction function, which
+    depends on source.
 
     Examples
     --------
@@ -283,22 +286,22 @@ def import_objects(objects, source, overwrite=True):
 
     Importing tickers from indices:
 
-    >>> import_objects("ICO2", "av-daily-adjusted")
-    >>> import_objects(["PETR4.SAO", "ICO2"], "av-daily-adjusted")
+    >>> import_objects("ICO2", "av-daily-adjusted", pause=1.0)
+    >>> import_objects(["PETR4.SAO", "ICO2"], "av-daily-adjusted", pause=1.0)
 
     """
     if isinstance(objects, str):
         objects = [objects]
 
     if source == "infofundos":
-        extract_func = extract_infofundos
+        extract_func = lambda s: extract_infofundos(s, *args, **kwargs)
     else:
-        extract_func = lambda s: extract_datareader(s, source)
+        extract_func = lambda s: extract_datareader(s, source, *args, **kwargs)
 
     available_items = set(collection.list_items())
     for obj in objects:
         if obj.lower() in _b3_indices:
-            import_objects(get_index(obj), source, overwrite)
+            import_objects(get_index(obj), source, overwrite, *args, **kwargs)
             continue
 
         if source != "infofundos" and obj in available_items:
@@ -400,11 +403,21 @@ def export_objects(objects):
     >>> data = export_objects("ICO2")
     >>> len(data.columns)  # 29 if KLBN11.SAO had data available
     28
-    >>> data = export_objects(["KROT3.SAO", "ICO2"])
+    >>> data = export_objects(["KROT3.SAO", "ICO2"]).truncate(after="2019-07-19")
     >>> len(data.columns)
     29
     >>> "KROT3.SAO" in data.columns and "ITUB4.SAO" in data.columns
     True
+    >>> data.tail()  # doctest: +ELLIPSIS
+                KROT3.SAO  ITUB4.SAO  BBDC4.SAO  ...
+    index                                        ...
+    2019-07-15      11.66      36.36      37.84  ...
+    2019-07-16      11.75      36.50      37.85  ...
+    2019-07-17      12.00      36.40      37.65  ...
+    2019-07-18      12.60      37.37      38.47  ...
+    2019-07-19      12.60      36.40      37.60  ...
+    <BLANKLINE>
+    [5 rows x 29 columns]
 
     When exporting indices, ticker redundancy is avoided:
 
@@ -513,7 +526,7 @@ def get_index(name):
     dataframe = (
         pd.read_html(url, decimal=",", thousands=".", index_col=0)[0]
         .iloc[:-1]
-        .sort_values("Part. (%)", ascending=False)
+        .sort_values("Part. (%)", ascending=False, kind="mergesort")
     )
     dataframe.index = dataframe.index + ".SAO"
     dataframe["Part. (%)"] /= 100.0

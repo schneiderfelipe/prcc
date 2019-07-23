@@ -4,6 +4,8 @@ prcc
 
 Personal daily time series storage for stock market and funds
 
+API can change at any moment without notice.
+
 Getting Started
 ===============
 

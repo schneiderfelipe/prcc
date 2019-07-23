@@ -59,12 +59,17 @@ def cli():
     )
     parser_export.add_argument("--to", "-t", dest="dest", help="destination of data")
 
-    parser_index_desc = "list tickers that compose a particular index"
+    parser_index_desc = "list tickers that compose particular indices"
     parser_index = subparsers.add_parser(
         "index", description=parser_index_desc, help=parser_index_desc
     )
     parser_index.add_argument(
-        "name", choices=prcc._b3_indices, type=str.lower, help="index name"
+        "names",
+        metavar="name",
+        nargs="+",
+        choices=prcc._b3_indices,
+        type=str.lower,
+        help="index name",
     )
 
     args = parser.parse_args()
@@ -83,7 +88,11 @@ def cli():
         else:
             print(dataframe.to_csv())
     elif args.command == "index":
-        tickers = prcc.get_index(args.name)
+        tickers = []
+        for name in args.names:
+            tickers += [
+                ticker for ticker in prcc.get_index(name) if ticker not in tickers
+            ]
         print("\n".join(tickers))
 
 
