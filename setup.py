@@ -8,7 +8,7 @@ setup(
     name="prcc",
     version="0.1",
     packages=find_packages(),
-    scripts=["bin/prcc"],
+    scripts=["bin/prcc", "bin/allct"],
     author="Felipe S. S. Schneider",
     author_email="schneider.felipe.5@gmail.com",
     description=("Personal daily time series storage for stock market and funds"),

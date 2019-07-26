@@ -1,0 +1,119 @@
+#!/usr/bin/python3
+# *Attention*: this is for informational purposes only and does not
+# constitute an offer to sell, a solicitation to buy, or a recommendation
+# for any security; nor does it constitute an offer to provide investment
+# advisory or other services. Nothing contained herein constitutes
+# investment advice or offers any opinion with respect to the suitability
+# of any security, and any views expressed herein should not be taken as
+# advice to buy, sell, or hold any security or as an endorsement of any
+# security or company. In preparing the information contained herein, it
+# has not been taken into account the investment needs, objectives, and
+# financial circumstances of any particular investor. Any views expressed
+# and data illustrated herein were prepared based upon information,
+# believed to be reliable, freely available at the time of publication.
+# There are no guarantees made as to their accuracy or completeness. All
+# information is subject to change and may quickly become unreliable for
+# various reasons, including changes in market conditions or economic
+# circumstances.
+
+"""
+simple and effective portfolio allocations for stock market and funds
+"""
+
+import logging
+import argparse
+
+import pandas as pd
+from pypfopt import (
+    discrete_allocation,
+    efficient_frontier,
+    expected_returns,
+    risk_models,
+)
+
+import prcc
+
+_logging_level = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG}
+
+# TODO: Minimum graph/plot interface like
+# <https://github.com/jackmoody11/portfolio_opt>
+# TODO: Minimum score interface like <https://github.com/jackmoody11/stockscore>
+# (I didn't like or understood the code there, but the idea is good)
+def cli():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        dest="verbosity",
+        action="count",
+        default=0,
+        help="increase output verbosity",
+    )
+    parser.add_argument(
+        "-T",
+        "--total-portfolio-value",
+        default=1000,
+        type=float,
+        help="the desired total value of the portfolio",
+    )
+    parser.add_argument(
+        "-B",
+        "--weight-bounds",
+        metavar="BOUND",
+        nargs=2,
+        default=[0.0, 0.25],
+        type=float,
+        help="bounds imposed on weights",
+    )
+    parser.add_argument(
+        "-r",
+        "--risk-free-rate",
+        default=0.059,
+        type=float,
+        help="risk-free rate of borrowing/lending",
+    )
+    parser.add_argument("dataset", help="data for assets to allocate")
+
+    args = parser.parse_args()
+    logging.basicConfig(level=_logging_level[args.verbosity])
+
+    prices = pd.read_csv(args.dataset, index_col=0).dropna(axis="columns", how="all")
+    print(
+        expected_returns.returns_from_prices(prices)
+        .describe()
+        .transpose()
+        .sort_values(["count", "std"])
+    )
+
+    shrinkage_target = "single_factor"
+    latest_prices = discrete_allocation.get_latest_prices(prices)
+
+    # Standard model
+    S = risk_models.CovarianceShrinkage(prices).ledoit_wolf(shrinkage_target)
+    mu = expected_returns.ema_historical_return(prices)
+
+    # Standard objective
+    ef = efficient_frontier.EfficientFrontier(mu, S, tuple(args.weight_bounds))
+    weights = ef.min_volatility()
+
+    # Standard Allocation
+    da = discrete_allocation.DiscreteAllocation(
+        weights, latest_prices, total_portfolio_value=args.total_portfolio_value
+    )
+    allocation, leftover = da.lp_portfolio()
+
+    allocation = pd.Series(allocation)
+    allocation.name = "allocations"
+
+    weights = allocation * latest_prices
+    weights /= weights.sum()
+    weights.name = "weights"
+
+    results = pd.concat([allocation, weights], axis="columns", sort=True).sort_values(
+        "weights", ascending=False, kind="mergesort"
+    )
+    print(results[results["allocations"] > 0])
+
+
+if __name__ == "__main__":
+    cli()

@@ -6,6 +6,7 @@ import time
 import logging
 import datetime
 from timeit import default_timer as timer
+from functools import lru_cache
 from collections import OrderedDict
 
 import numpy as np
@@ -60,7 +61,6 @@ _b3_indices = {
 }
 
 
-# TODO: make an example with Quandl
 def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
     """
     Retrieve daily data with web.DataReader.
@@ -106,6 +106,9 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
     ...     print(ticker, metadata)
     PETR4.SAO {'price_column': 'adjusted close'}
     ITUB4.SAO {'price_column': 'adjusted close'}
+    >>> for ticker, data, metadata in extract_datareader("BCB/11", data_source="quandl"):
+    ...     print(ticker, metadata)
+    BCB/11 {'price_column': 'Value'}
 
     """
     global _last_api_call
@@ -120,7 +123,10 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
             pause = 1.0
     extra_pause = 0.25 * pause
 
-    metadata = {"price_column": "adjusted close"}
+    if data_source == "quandl":
+        metadata = {"price_column": "Value"}
+    else:
+        metadata = {"price_column": "adjusted close"}
     for ticker in tickers:
         end = timer()
         if end - _last_api_call > pause:
@@ -159,6 +165,7 @@ def extract_datareader(tickers, data_source="av-daily-adjusted", pause=None):
         yield ticker, data, metadata
 
 
+@lru_cache(maxsize=32)
 def extract_infofundos(io):
     """
     Extract data from a Excel file in InfoFundos format.
@@ -233,7 +240,6 @@ def extract_infofundos(io):
         yield item, data, metadata
 
 
-# TODO: make an example with Quandl
 def import_objects(objects, source, overwrite=True, *args, **kwargs):
     """
     Store objects using PyStore.
@@ -288,6 +294,19 @@ def import_objects(objects, source, overwrite=True, *args, **kwargs):
 
     >>> import_objects("ICO2", "av-daily-adjusted", pause=1.0)
     >>> import_objects(["PETR4.SAO", "ICO2"], "av-daily-adjusted", pause=1.0)
+
+    Importing tickers from Quandl:
+
+    >>> import_objects("BCB/11", "quandl")
+    >>> item = collection.item("BCB/11").to_pandas().truncate(after="2019-07-23")
+    >>> item.tail()  # doctest: +NORMALIZE_WHITESPACE
+                  Value
+    Date
+    2019-07-17  0.02462
+    2019-07-18  0.02462
+    2019-07-19  0.02462
+    2019-07-22  0.02462
+    2019-07-23  0.02462
 
     """
     if isinstance(objects, str):
@@ -398,6 +417,18 @@ def export_objects(objects):
     2019-07-11      28.40        NaN
     2019-07-12      28.53        NaN
 
+    Exporting from Quandl:
+
+    >>> data = export_objects("BCB/11").truncate(after="2019-07-23")
+    >>> data.tail()  # doctest: +NORMALIZE_WHITESPACE
+                 BCB/11
+    Date
+    2019-07-17  0.02462
+    2019-07-18  0.02462
+    2019-07-19  0.02462
+    2019-07-22  0.02462
+    2019-07-23  0.02462
+
     Exporting tickers from indices:
 
     >>> data = export_objects("ICO2")
@@ -462,6 +493,7 @@ def export_objects(objects):
     return data
 
 
+@lru_cache(maxsize=32)
 def get_index(name):
     """
     Get a list of tickers for an index.
