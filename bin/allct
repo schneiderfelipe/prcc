@@ -72,20 +72,35 @@ def cli():
         type=float,
         help="risk-free rate of borrowing/lending",
     )
+    parser.add_argument(
+        "-m",
+        "--minimum-number-of-datapoints",
+        metavar="NUMBER",
+        default=5,
+        type=int,
+        help="tickers with less than this number of datapoints are ignored",
+    )
     parser.add_argument("dataset", help="data for assets to allocate")
 
     args = parser.parse_args()
     logging.basicConfig(level=_logging_level[args.verbosity])
 
     prices = pd.read_csv(args.dataset, index_col=0).dropna(axis="columns", how="all")
-    print(
+    prices = prices.drop(
+        prices.columns[prices.count() < args.minimum_number_of_datapoints],
+        axis="columns",
+    )
+
+    logging.info(f"NUMBER OF AVAILABLE TICKERS: {len(prices.columns)}\n")
+    returns_description = (
         expected_returns.returns_from_prices(prices)
         .describe()
         .transpose()
         .sort_values(["count", "std"])
     )
+    logging.info(f"BRIEF SUMMARY OF DAILY RETURNS:\n{returns_description}\n")
 
-    shrinkage_target = "single_factor"
+    shrinkage_target = "single_factor"  # TODO: turn into argument
     latest_prices = discrete_allocation.get_latest_prices(prices)
 
     # Standard model
@@ -112,7 +127,7 @@ def cli():
     results = pd.concat([allocation, weights], axis="columns", sort=True).sort_values(
         "weights", ascending=False, kind="mergesort"
     )
-    print(results[results["allocations"] > 0])
+    print(f"ALLOCATION WITH MINIMUM EXPECTED VOLATILITY:\n{results[results['allocations'] > 0]}")
 
 
 if __name__ == "__main__":
